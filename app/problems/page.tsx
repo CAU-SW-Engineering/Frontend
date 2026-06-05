@@ -14,8 +14,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { problems as api, Category, Problem } from "@/lib/api"
+import { problems as api, Category, Problem, Difficulty } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+
+const DIFFICULTY_META: Record<Difficulty, { label: string; className: string }> = {
+  EASY: { label: "초급", className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
+  MEDIUM: { label: "중급", className: "bg-amber-500/10 text-amber-400 border-amber-500/30" },
+  HARD: { label: "고급", className: "bg-rose-500/10 text-rose-400 border-rose-500/30" },
+}
 
 export default function ProblemsPage() {
   const { user } = useAuth()
@@ -26,6 +32,7 @@ export default function ProblemsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProblem, setSelectedProblem] = useState<number | null>(null)
 
@@ -34,15 +41,15 @@ export default function ProblemsPage() {
     api.getCategories().then(setCategories).catch(() => {})
   }, [])
 
-  // 문제 목록 로드 (카테고리 변경 시 재요청)
+  // 문제 목록 로드 (카테고리/난이도 변경 시 재요청)
   useEffect(() => {
     setLoading(true)
     setError(null)
-    api.getList(selectedCategoryId ?? undefined)
+    api.getList(selectedCategoryId ?? undefined, selectedDifficulty ?? undefined)
       .then(setProblemList)
       .catch(() => setError("문제 목록을 불러오지 못했습니다."))
       .finally(() => setLoading(false))
-  }, [selectedCategoryId])
+  }, [selectedCategoryId, selectedDifficulty])
 
   const filteredProblems = problemList.filter((p) =>
     !searchQuery || p.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -133,6 +140,27 @@ export default function ProblemsPage() {
                   className="pl-9"
                 />
               </div>
+
+              {/* 난이도 필터 (FR-28) */}
+              <div className="flex gap-2">
+                <Button
+                  variant={selectedDifficulty === null ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedDifficulty(null)}
+                >
+                  전체
+                </Button>
+                {(["EASY", "MEDIUM", "HARD"] as Difficulty[]).map((d) => (
+                  <Button
+                    key={d}
+                    variant={selectedDifficulty === d ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedDifficulty(d)}
+                  >
+                    {DIFFICULTY_META[d].label}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             {/* Mobile Category Filter */}
@@ -195,7 +223,15 @@ export default function ProblemsPage() {
                             <div className="h-5 w-5 rounded-full border border-border/60" />
                           </div>
                         )}
-                        <div className={cn(user ? "col-span-6" : "col-span-7")}>
+                        <div className={cn("flex items-center gap-2", user ? "col-span-6" : "col-span-7")}>
+                          {problem.difficulty && (
+                            <Badge
+                              variant="outline"
+                              className={cn("text-xs shrink-0", DIFFICULTY_META[problem.difficulty]?.className)}
+                            >
+                              {DIFFICULTY_META[problem.difficulty]?.label ?? problem.difficulty}
+                            </Badge>
+                          )}
                           <span className="font-medium">{problem.title}</span>
                         </div>
                         <div className="col-span-3">

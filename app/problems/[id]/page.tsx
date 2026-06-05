@@ -11,8 +11,10 @@ import {
   ArrowLeft,
   Lightbulb,
   Loader2,
+  Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,8 +27,22 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import { problems as problemsApi, submissions as submissionsApi, Problem, Submission, SubmissionStatus } from "@/lib/api"
+import {
+  problems as problemsApi,
+  submissions as submissionsApi,
+  Problem,
+  Submission,
+  SubmissionStatus,
+  Difficulty,
+  SolutionEntry,
+} from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+
+const DIFFICULTY_META: Record<Difficulty, { label: string; className: string }> = {
+  EASY: { label: "초급", className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
+  MEDIUM: { label: "중급", className: "bg-amber-500/10 text-amber-400 border-amber-500/30" },
+  HARD: { label: "고급", className: "bg-rose-500/10 text-rose-400 border-rose-500/30" },
+}
 
 const FINAL_STATUSES: SubmissionStatus[] = [
   "ACCEPTED", "WRONG_ANSWER", "RUNTIME_ERROR",
@@ -74,6 +90,25 @@ export default function ProblemSolvePage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [result, setResult] = useState<Submission | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // FR-29 풀이 비교
+  const [solutionsOpen, setSolutionsOpen] = useState(false)
+  const [solutions, setSolutions] = useState<SolutionEntry[] | null>(null)
+  const [solutionsLoading, setSolutionsLoading] = useState(false)
+
+  const loadSolutions = useCallback(async (open: boolean) => {
+    setSolutionsOpen(open)
+    if (open && solutions === null) {
+      setSolutionsLoading(true)
+      try {
+        setSolutions(await problemsApi.getSolutions(Number(id)))
+      } catch {
+        setSolutions([])
+      } finally {
+        setSolutionsLoading(false)
+      }
+    }
+  }, [id, solutions])
 
   // 문제 로드
   useEffect(() => {
@@ -171,7 +206,14 @@ export default function ProblemSolvePage() {
         {/* Left Panel - Problem Description */}
         <div className="w-[40%] overflow-y-auto border-r border-border/40 bg-card/50">
           <div className="p-6">
-            <h2 className="text-2xl font-bold">{problem.title}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold">{problem.title}</h2>
+              {problem.difficulty && (
+                <Badge variant="outline" className={cn("text-xs", DIFFICULTY_META[problem.difficulty]?.className)}>
+                  {DIFFICULTY_META[problem.difficulty]?.label ?? problem.difficulty}
+                </Badge>
+              )}
+            </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>시간 제한: {problem.timeLimitMs / 1000}초</span>
               <span>·</span>
@@ -227,6 +269,45 @@ export default function ProblemSolvePage() {
                   <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 text-sm text-muted-foreground whitespace-pre-wrap">
                     {problem.hint ?? "힌트가 없습니다."}
                   </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* 다른 사람 풀이 (FR-29) */}
+              <Collapsible open={solutionsOpen} onOpenChange={loadSolutions}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      <span>다른 사람 풀이</span>
+                    </div>
+                    <ChevronRight
+                      className={cn("h-4 w-4 transition-transform", solutionsOpen && "rotate-90")}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-3">
+                  {solutionsLoading ? (
+                    <div className="py-4 text-center text-sm text-muted-foreground">불러오는 중...</div>
+                  ) : !solutions || solutions.length === 0 ? (
+                    <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 text-sm text-muted-foreground">
+                      아직 등록된 정답 풀이가 없습니다.
+                    </div>
+                  ) : (
+                    solutions.map((s) => (
+                      <div key={s.submissionId} className="rounded-lg border border-border/60 bg-secondary/20 p-3">
+                        <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{s.username}</span>
+                          <span>
+                            {s.language}
+                            {s.executionTimeMs !== null && ` · ${s.executionTimeMs}ms`}
+                          </span>
+                        </div>
+                        <pre className="overflow-x-auto rounded bg-[#0d1117] p-3 font-mono text-xs text-muted-foreground">
+                          {s.code}
+                        </pre>
+                      </div>
+                    ))
+                  )}
                 </CollapsibleContent>
               </Collapsible>
             </div>

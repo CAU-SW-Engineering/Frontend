@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Check,
   ChevronRight,
+  Sparkles,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,7 +17,25 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { useAuth } from "@/lib/auth-context"
-import { users as usersApi, UserStats, Submission } from "@/lib/api"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { FlaskConical, Trash2 } from "lucide-react"
+import {
+  users as usersApi,
+  problems as problemsApi,
+  experiments as experimentsApi,
+  UserStats,
+  Submission,
+  Problem,
+  Difficulty,
+  Experiment,
+} from "@/lib/api"
+
+const DIFFICULTY_META: Record<Difficulty, { label: string; className: string }> = {
+  EASY: { label: "초급", className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
+  MEDIUM: { label: "중급", className: "bg-amber-500/10 text-amber-400 border-amber-500/30" },
+  HARD: { label: "고급", className: "bg-rose-500/10 text-rose-400 border-rose-500/30" },
+}
 
 const STATUS_LABEL: Record<string, string> = {
   ACCEPTED: "정답",
@@ -46,7 +65,27 @@ export default function DashboardPage() {
 
   const [stats, setStats] = useState<UserStats | null>(null)
   const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([])
+  const [recommendations, setRecommendations] = useState<Problem[]>([])
+  const [experimentList, setExperimentList] = useState<Experiment[]>([])
+  const [expForm, setExpForm] = useState({ title: "", params: "", metrics: "" })
   const [dataLoading, setDataLoading] = useState(true)
+
+  const addExperiment = async () => {
+    if (!user || !expForm.title.trim()) return
+    const created = await experimentsApi.create({
+      userId: user.userId,
+      title: expForm.title,
+      params: expForm.params,
+      metrics: expForm.metrics,
+    })
+    setExperimentList((prev) => [created, ...prev])
+    setExpForm({ title: "", params: "", metrics: "" })
+  }
+
+  const removeExperiment = async (id: number) => {
+    await experimentsApi.remove(id)
+    setExperimentList((prev) => prev.filter((e) => e.experimentId !== id))
+  }
 
   // 비로그인 시 로그인 페이지로
   useEffect(() => {
@@ -55,10 +94,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return
-    Promise.all([usersApi.getStats(), usersApi.getSubmissions()])
-      .then(([s, subs]) => {
+    Promise.all([
+      usersApi.getStats(),
+      usersApi.getSubmissions(),
+      problemsApi.getRecommendations(user.userId, 3).catch(() => [] as Problem[]),
+      experimentsApi.list(user.userId).catch(() => [] as Experiment[]),
+    ])
+      .then(([s, subs, recs, exps]) => {
         setStats(s)
         setRecentSubmissions(subs.slice(0, 10))
+        setRecommendations(recs)
+        setExperimentList(exps)
       })
       .finally(() => setDataLoading(false))
   }, [user])
@@ -126,6 +172,40 @@ export default function DashboardPage() {
               </Card>
             ))}
           </div>
+
+          {/* 추천 문제 (FR-26) */}
+          {recommendations.length > 0 && (
+            <Card className="mb-8 border-border/60 bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  추천 문제
+                  <span className="text-sm font-normal text-muted-foreground">아직 풀지 않은 문제예요</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {recommendations.map((p) => (
+                    <Link
+                      key={p.problemId}
+                      href={`/problems/${p.problemId}`}
+                      className="rounded-lg border border-border/60 bg-secondary/20 p-4 transition-colors hover:bg-secondary/40"
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        {p.difficulty && (
+                          <Badge variant="outline" className={`text-xs ${DIFFICULTY_META[p.difficulty]?.className ?? ""}`}>
+                            {DIFFICULTY_META[p.difficulty]?.label ?? p.difficulty}
+                          </Badge>
+                        )}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <p className="font-medium">{p.title}</p>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Recent Submissions */}
           <Card className="border-border/60 bg-card">
@@ -203,6 +283,65 @@ export default function DashboardPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          {/* 실험 기록 (FR-30) */}
+          <Card className="mt-8 border-border/60 bg-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FlaskConical className="h-5 w-5 text-primary" />
+                실험 기록
+                <span className="text-sm font-normal text-muted-foreground">하이퍼파라미터·지표를 남겨 성장을 추적하세요</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* 추가 폼 */}
+              <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                <Input
+                  placeholder="제목 (예: lr 튜닝)"
+                  value={expForm.title}
+                  onChange={(e) => setExpForm({ ...expForm, title: e.target.value })}
+                />
+                <Input
+                  placeholder='파라미터 {"lr":0.01}'
+                  value={expForm.params}
+                  onChange={(e) => setExpForm({ ...expForm, params: e.target.value })}
+                />
+                <Input
+                  placeholder='지표 {"acc":0.93}'
+                  value={expForm.metrics}
+                  onChange={(e) => setExpForm({ ...expForm, metrics: e.target.value })}
+                />
+                <Button onClick={addExperiment} disabled={!expForm.title.trim()}>
+                  기록 추가
+                </Button>
+              </div>
+
+              {experimentList.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  아직 실험 기록이 없습니다.
+                </p>
+              ) : (
+                <div className="divide-y divide-border/40">
+                  {experimentList.map((exp) => (
+                    <div key={exp.experimentId} className="flex items-center justify-between gap-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{exp.title ?? "(제목 없음)"}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {[exp.params, exp.metrics].filter(Boolean).join("  ·  ") || "-"}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeExperiment(exp.experimentId)}
+                        className="shrink-0 text-muted-foreground transition-colors hover:text-rose-400"
+                        aria-label="삭제"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

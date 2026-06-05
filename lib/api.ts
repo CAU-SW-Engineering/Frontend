@@ -63,12 +63,15 @@ export interface Category {
   parentId: number | null
 }
 
+export type Difficulty = "EASY" | "MEDIUM" | "HARD"
+
 export interface Problem {
   problemId: number
   title: string
   content: string
   inputExample: string
   outputExample: string
+  difficulty: Difficulty
   timeLimitMs: number
   memoryLimitMb: number
   categoryId: number
@@ -76,15 +79,36 @@ export interface Problem {
   createdAt: string
 }
 
+export interface SolutionEntry {
+  submissionId: number
+  userId: number
+  username: string
+  language: string
+  executionTimeMs: number | null
+  code: string
+  submittedAt: string
+}
+
 export const problems = {
   getCategories: () => request<Category[]>("/api/problems/categories"),
 
-  getList: (categoryId?: number) =>
-    request<Problem[]>(
-      categoryId ? `/api/problems?categoryId=${categoryId}` : "/api/problems"
-    ),
+  getList: (categoryId?: number, difficulty?: Difficulty) => {
+    const qs = new URLSearchParams()
+    if (categoryId) qs.set("categoryId", String(categoryId))
+    if (difficulty) qs.set("difficulty", difficulty)
+    const q = qs.toString()
+    return request<Problem[]>(`/api/problems${q ? `?${q}` : ""}`)
+  },
 
   getById: (id: number) => request<Problem>(`/api/problems/${id}`),
+
+  // FR-26 문제 추천: 아직 못 푼 문제를 쉬운 난이도 순으로
+  getRecommendations: (userId: number, limit = 3) =>
+    request<Problem[]>(`/api/problems/recommendations?userId=${userId}&limit=${limit}`),
+
+  // FR-29 풀이 비교: 해당 문제의 정답 제출들
+  getSolutions: (problemId: number, limit = 20) =>
+    request<SolutionEntry[]>(`/api/problems/${problemId}/solutions?limit=${limit}`),
 }
 
 // ── Submissions ───────────────────────────────────────────────────────────────
@@ -145,4 +169,61 @@ export const users = {
   getStats: () => request<UserStats>("/api/users/me/stats"),
 
   getSubmissions: () => request<Submission[]>("/api/users/me/submissions"),
+}
+
+// ── Leaderboard (FR-31) ─────────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  rank: number
+  userId: number
+  username: string
+  solvedCount: number
+  wrongCount: number
+  accuracy: number
+  tier: string
+}
+
+export const leaderboard = {
+  getRanking: (limit?: number) =>
+    request<LeaderboardEntry[]>(`/api/leaderboard${limit ? `?limit=${limit}` : ""}`),
+}
+
+// ── Experiments (FR-30) ─────────────────────────────────────────────────────────
+
+export interface Experiment {
+  experimentId: number
+  userId: number
+  problemId: number | null
+  submissionId: number | null
+  title: string | null
+  params: string | null
+  metrics: string | null
+  note: string | null
+  createdAt: string
+}
+
+export interface ExperimentRequest {
+  userId: number
+  problemId?: number
+  submissionId?: number
+  title?: string
+  params?: string
+  metrics?: string
+  note?: string
+}
+
+export const experiments = {
+  create: (body: ExperimentRequest) =>
+    request<Experiment>("/api/experiments", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  list: (userId: number, problemId?: number) =>
+    request<Experiment[]>(
+      `/api/experiments?userId=${userId}${problemId ? `&problemId=${problemId}` : ""}`
+    ),
+
+  remove: (id: number) =>
+    request<void>(`/api/experiments/${id}`, { method: "DELETE" }),
 }
