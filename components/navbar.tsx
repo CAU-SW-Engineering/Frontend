@@ -1,18 +1,26 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { Brain } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
 
 export function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { user, logout } = useAuth()
 
   const navLinks = [
     { href: "/problems", label: "문제" },
     { href: "/leaderboard", label: "리더보드" },
   ]
+
+  const handleLogout = () => {
+    logout()
+    router.push("/")
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm">
@@ -42,16 +50,34 @@ export function Navbar() {
           </nav>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm">
-              대시보드
-            </Button>
-          </Link>
-          <Link href="/login">
-            <Button variant="outline" size="sm">
-              로그인
-            </Button>
-          </Link>
+          {user ? (
+            <>
+              <span className="hidden text-sm text-muted-foreground sm:inline">
+                {user.username}
+              </span>
+              <Link href="/dashboard">
+                <Button variant="ghost" size="sm">
+                  대시보드
+                </Button>
+              </Link>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                로그아웃
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/dashboard">
+                <Button variant="ghost" size="sm">
+                  대시보드
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button variant="outline" size="sm">
+                  로그인
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>

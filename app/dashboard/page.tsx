@@ -1,148 +1,91 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Trophy,
-  Flame,
   Target,
   TrendingUp,
   Check,
   ChevronRight,
-  Award,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
-import {
-  Bar,
-  BarChart,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Cell,
-} from "recharts"
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart"
+import { useAuth } from "@/lib/auth-context"
+import { users as usersApi, UserStats, Submission } from "@/lib/api"
 
-const stats = [
-  {
-    label: "해결한 문제",
-    value: "47",
-    icon: Check,
-    change: "이번 주 +5",
-  },
-  {
-    label: "연속 학습",
-    value: "12",
-    icon: Flame,
-    change: "일",
-  },
-  {
-    label: "정답률",
-    value: "68%",
-    icon: Target,
-    change: "지난 달 대비 +3%",
-  },
-  {
-    label: "전체 순위",
-    value: "#1,247",
-    icon: TrendingUp,
-    change: "상위 15%",
-  },
-]
-
-const progressData = [
-  { category: "데이터 전처리", solved: 18, total: 24, fill: "var(--color-chart-2)" },
-  { category: "모델 아키텍처", solved: 12, total: 31, fill: "var(--color-chart-1)" },
-  { category: "손실 함수", solved: 8, total: 18, fill: "var(--color-chart-3)" },
-  { category: "학습 루프", solved: 6, total: 22, fill: "var(--color-chart-5)" },
-  { category: "평가", solved: 3, total: 15, fill: "var(--color-chart-4)" },
-]
-
-const chartConfig = {
-  solved: {
-    label: "해결",
-    color: "var(--color-primary)",
-  },
+const STATUS_LABEL: Record<string, string> = {
+  ACCEPTED: "정답",
+  WRONG_ANSWER: "오답",
+  PENDING: "대기중",
+  JUDGING: "채점중",
+  RUNTIME_ERROR: "런타임 에러",
+  TIME_LIMIT: "시간 초과",
+  MEMORY_LIMIT: "메모리 초과",
+  COMPILE_ERROR: "컴파일 에러",
+  SYSTEM_ERROR: "시스템 오류",
 }
 
-const recentActivity = [
-  {
-    id: 1,
-    title: "배치 정규화 구현하기",
-    difficulty: "보통",
-    date: "오늘",
-    status: "해결",
-  },
-  {
-    id: 2,
-    title: "커스텀 데이터로더 구축",
-    difficulty: "보통",
-    date: "어제",
-    status: "해결",
-  },
-  {
-    id: 3,
-    title: "정밀도, 재현율, F1 점수 계산",
-    difficulty: "쉬움",
-    date: "2일 전",
-    status: "해결",
-  },
-  {
-    id: 4,
-    title: "미니배치 경사 하강법",
-    difficulty: "보통",
-    date: "3일 전",
-    status: "시도함",
-  },
-  {
-    id: 5,
-    title: "데이터 증강 파이프라인 구축",
-    difficulty: "쉬움",
-    date: "4일 전",
-    status: "해결",
-  },
-]
-
-const recommendedProblems = [
-  {
-    id: 1,
-    title: "드롭아웃 레이어 구현",
-    category: "모델 아키텍처",
-    difficulty: "보통",
-  },
-  {
-    id: 2,
-    title: "커스텀 크로스 엔트로피 손실 함수 작성",
-    category: "손실 함수",
-    difficulty: "어려움",
-  },
-  {
-    id: 3,
-    title: "Adam 옵티마이저 구현",
-    category: "학습 루프",
-    difficulty: "어려움",
-  },
-]
-
-const difficultyColors: Record<string, string> = {
-  쉬움: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  보통: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  어려움: "bg-rose-500/20 text-rose-400 border-rose-500/30",
-}
-
-const categoryColors: Record<string, string> = {
-  "모델 아키텍처": "bg-primary/20 text-primary border-primary/30",
-  "손실 함수": "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  "학습 루프": "bg-rose-500/20 text-rose-400 border-rose-500/30",
+function formatDate(iso: string) {
+  const d = new Date(iso)
+  const now = new Date()
+  const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
+  if (diff < 60) return "방금 전"
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+  return `${Math.floor(diff / 86400)}일 전`
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const { user, loading } = useAuth()
+
+  const [stats, setStats] = useState<UserStats | null>(null)
+  const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
+
+  // 비로그인 시 로그인 페이지로
+  useEffect(() => {
+    if (!loading && !user) router.push("/login")
+  }, [user, loading, router])
+
+  useEffect(() => {
+    if (!user) return
+    Promise.all([usersApi.getStats(), usersApi.getSubmissions()])
+      .then(([s, subs]) => {
+        setStats(s)
+        setRecentSubmissions(subs.slice(0, 10))
+      })
+      .finally(() => setDataLoading(false))
+  }, [user])
+
+  if (loading || !user) return null
+
+  const statCards = [
+    {
+      label: "해결한 문제",
+      value: stats?.solvedCount ?? "-",
+      icon: Check,
+      sub: stats ? `시도 ${stats.attemptedCount}회` : "",
+    },
+    {
+      label: "정답률",
+      value: stats ? `${stats.accuracy.toFixed(1)}%` : "-",
+      icon: Target,
+      sub: stats ? `오답 ${stats.wrongCount}회` : "",
+    },
+    {
+      label: "총 제출",
+      value: stats?.attemptedCount ?? "-",
+      icon: TrendingUp,
+      sub: "",
+    },
+  ]
+
   return (
     <div className="flex min-h-screen flex-col">
       <Navbar />
@@ -152,35 +95,28 @@ export default function DashboardPage() {
           {/* Profile Section */}
           <div className="mb-8 flex flex-col items-start gap-6 sm:flex-row sm:items-center">
             <Avatar className="h-20 w-20 border-2 border-primary/30">
-              <AvatarImage src="https://github.com/shadcn.png" />
-              <AvatarFallback>김</AvatarFallback>
+              <AvatarFallback>{user.username.charAt(0)}</AvatarFallback>
             </Avatar>
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">김개발</h1>
-                <Badge className="gap-1 bg-gradient-to-r from-primary to-accent text-primary-foreground">
-                  <Award className="h-3 w-3" />
-                  ML 엔지니어 Lv.3
-                </Badge>
-              </div>
-              <p className="mt-1 text-muted-foreground">
-                47개 문제 해결 · 2024년 1월 가입
-              </p>
+              <h1 className="text-2xl font-bold">{user.username}</h1>
+              <p className="mt-1 text-muted-foreground">{user.email}</p>
             </div>
           </div>
 
           {/* Stats Grid */}
-          <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {stats.map((stat) => (
+          <div className="mb-8 grid gap-4 sm:grid-cols-3">
+            {statCards.map((stat) => (
               <Card key={stat.label} className="border-border/60 bg-card">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-muted-foreground">{stat.label}</p>
-                      <p className="mt-1 text-3xl font-bold">{stat.value}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {stat.change}
+                      <p className="mt-1 text-3xl font-bold">
+                        {dataLoading ? "..." : stat.value}
                       </p>
+                      {stat.sub && (
+                        <p className="mt-1 text-xs text-muted-foreground">{stat.sub}</p>
+                      )}
                     </div>
                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                       <stat.icon className="h-6 w-6 text-primary" />
@@ -191,160 +127,84 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-3">
-            {/* Progress Chart */}
-            <Card className="border-border/60 bg-card lg:col-span-2">
-              <CardHeader>
-                <CardTitle>카테고리별 진행률</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={progressData}
-                      layout="vertical"
-                      margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
-                    >
-                      <XAxis type="number" hide />
-                      <YAxis
-                        type="category"
-                        dataKey="category"
-                        axisLine={false}
-                        tickLine={false}
-                        width={90}
-                        tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                      />
-                      <ChartTooltip
-                        cursor={{ fill: "var(--color-muted)", opacity: 0.1 }}
-                        content={
-                          <ChartTooltipContent
-                            formatter={(value, name, props) => {
-                              const item = props.payload
-                              return (
-                                <span>
-                                  {item.solved} / {item.total} 해결
-                                </span>
-                              )
-                            }}
-                          />
-                        }
-                      />
-                      <Bar
-                        dataKey="solved"
-                        radius={[0, 4, 4, 0]}
-                        barSize={24}
-                      >
-                        {progressData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-
-            {/* Recommended Problems */}
-            <Card className="border-border/60 bg-card">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  추천 문제
-                  <Trophy className="h-5 w-5 text-primary" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {recommendedProblems.map((problem) => (
-                  <Link
-                    key={problem.id}
-                    href={`/problems/${problem.id}`}
-                    className="group block rounded-lg border border-border/60 bg-secondary/30 p-4 transition-colors hover:border-primary/40"
-                  >
-                    <h4 className="font-medium group-hover:text-primary">
-                      {problem.title}
-                    </h4>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={`text-xs ${categoryColors[problem.category]}`}
-                      >
-                        {problem.category}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={`text-xs ${difficultyColors[problem.difficulty]}`}
-                      >
-                        {problem.difficulty}
-                      </Badge>
-                    </div>
-                  </Link>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Recent Activity */}
-          <Card className="mt-8 border-border/60 bg-card">
+          {/* Recent Submissions */}
+          <Card className="border-border/60 bg-card">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                최근 활동
+                최근 제출
                 <Link
                   href="/problems"
                   className="flex items-center gap-1 text-sm font-normal text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  전체 보기
+                  문제 풀기
                   <ChevronRight className="h-4 w-4" />
                 </Link>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border/60 text-left text-sm text-muted-foreground">
-                      <th className="pb-3 font-medium">문제</th>
-                      <th className="pb-3 font-medium">난이도</th>
-                      <th className="pb-3 font-medium">날짜</th>
-                      <th className="pb-3 font-medium">상태</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40">
-                    {recentActivity.map((activity) => (
-                      <tr key={activity.id} className="group">
-                        <td className="py-4">
-                          <Link
-                            href={`/problems/${activity.id}`}
-                            className="font-medium transition-colors group-hover:text-primary"
-                          >
-                            {activity.title}
-                          </Link>
-                        </td>
-                        <td className="py-4">
-                          <Badge
-                            variant="outline"
-                            className={`text-xs ${difficultyColors[activity.difficulty]}`}
-                          >
-                            {activity.difficulty}
-                          </Badge>
-                        </td>
-                        <td className="py-4 text-sm text-muted-foreground">
-                          {activity.date}
-                        </td>
-                        <td className="py-4">
-                          <span
-                            className={`text-sm ${
-                              activity.status === "해결"
-                                ? "text-emerald-400"
-                                : "text-amber-400"
-                            }`}
-                          >
-                            {activity.status}
-                          </span>
-                        </td>
+              {dataLoading ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">불러오는 중...</p>
+              ) : recentSubmissions.length === 0 ? (
+                <div className="py-12 text-center">
+                  <Trophy className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">아직 제출 이력이 없습니다.</p>
+                  <Link href="/problems" className="mt-3 inline-block text-sm text-primary hover:underline">
+                    문제 풀러 가기
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border/60 text-left text-sm text-muted-foreground">
+                        <th className="pb-3 font-medium">문제 ID</th>
+                        <th className="pb-3 font-medium">언어</th>
+                        <th className="pb-3 font-medium">상태</th>
+                        <th className="pb-3 font-medium">점수</th>
+                        <th className="pb-3 font-medium">제출 시각</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {recentSubmissions.map((sub) => (
+                        <tr key={sub.submissionId} className="group">
+                          <td className="py-4">
+                            <Link
+                              href={`/problems/${sub.problemId}`}
+                              className="font-medium transition-colors group-hover:text-primary"
+                            >
+                              #{sub.problemId}
+                            </Link>
+                          </td>
+                          <td className="py-4">
+                            <Badge variant="outline" className="text-xs">
+                              {sub.language}
+                            </Badge>
+                          </td>
+                          <td className="py-4">
+                            <span
+                              className={
+                                sub.status === "ACCEPTED"
+                                  ? "text-sm text-emerald-400"
+                                  : sub.status === "PENDING" || sub.status === "JUDGING"
+                                  ? "text-sm text-amber-400"
+                                  : "text-sm text-rose-400"
+                              }
+                            >
+                              {STATUS_LABEL[sub.status] ?? sub.status}
+                            </span>
+                          </td>
+                          <td className="py-4 text-sm text-muted-foreground">
+                            {sub.score !== null ? `${sub.score}점` : "-"}
+                          </td>
+                          <td className="py-4 text-sm text-muted-foreground">
+                            {formatDate(sub.submittedAt)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
