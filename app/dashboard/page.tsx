@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<UserStats | null>(null)
   const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([])
   const [recommendations, setRecommendations] = useState<Problem[]>([])
+  const [problemMap, setProblemMap] = useState<Record<number, string>>({})
   const [experimentList, setExperimentList] = useState<Experiment[]>([])
   const [expForm, setExpForm] = useState({ title: "", params: "", metrics: "" })
   const [dataLoading, setDataLoading] = useState(true)
@@ -73,7 +74,6 @@ export default function DashboardPage() {
   const addExperiment = async () => {
     if (!user || !expForm.title.trim()) return
     const created = await experimentsApi.create({
-      userId: user.userId,
       title: expForm.title,
       params: expForm.params,
       metrics: expForm.metrics,
@@ -97,14 +97,23 @@ export default function DashboardPage() {
     Promise.all([
       usersApi.getStats(),
       usersApi.getSubmissions(),
-      problemsApi.getRecommendations(user.userId, 3).catch(() => [] as Problem[]),
-      experimentsApi.list(user.userId).catch(() => [] as Experiment[]),
+      problemsApi.getRecommendations(3).catch(() => [] as Problem[]),
+      experimentsApi.list().catch(() => [] as Experiment[]),
     ])
       .then(([s, subs, recs, exps]) => {
         setStats(s)
-        setRecentSubmissions(subs.slice(0, 10))
+        const recent = subs.slice(0, 10)
+        setRecentSubmissions(recent)
         setRecommendations(recs)
         setExperimentList(exps)
+        // 제출 이력에 등장하는 문제 ID의 제목을 일괄 조회
+        const ids = [...new Set(recent.map((sub) => sub.problemId))]
+        Promise.all(ids.map((id) => problemsApi.getById(id).catch(() => null)))
+          .then((probs) => {
+            const map: Record<number, string> = {}
+            probs.forEach((p) => { if (p) map[p.problemId] = p.title })
+            setProblemMap(map)
+          })
       })
       .finally(() => setDataLoading(false))
   }, [user])
@@ -237,7 +246,7 @@ export default function DashboardPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border/60 text-left text-sm text-muted-foreground">
-                        <th className="pb-3 font-medium">문제 ID</th>
+                        <th className="pb-3 font-medium">문제</th>
                         <th className="pb-3 font-medium">언어</th>
                         <th className="pb-3 font-medium">상태</th>
                         <th className="pb-3 font-medium">점수</th>
@@ -252,7 +261,7 @@ export default function DashboardPage() {
                               href={`/problems/${sub.problemId}`}
                               className="font-medium transition-colors group-hover:text-primary"
                             >
-                              #{sub.problemId}
+                              {problemMap[sub.problemId] ?? `#${sub.problemId}`}
                             </Link>
                           </td>
                           <td className="py-4">

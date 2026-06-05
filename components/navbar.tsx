@@ -14,6 +14,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: "/problems", label: "문제" },
+    { href: "/leaderboard", label: "리더보드" },
   ]
 
   const handleLogout = () => {

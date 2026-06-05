@@ -102,9 +102,9 @@ export const problems = {
 
   getById: (id: number) => request<Problem>(`/api/problems/${id}`),
 
-  // FR-26 문제 추천: 아직 못 푼 문제를 쉬운 난이도 순으로
-  getRecommendations: (userId: number, limit = 3) =>
-    request<Problem[]>(`/api/problems/recommendations?userId=${userId}&limit=${limit}`),
+  // FR-26 문제 추천: 아직 못 푼 문제를 쉬운 난이도 순으로 (userId는 토큰에서 서버가 추출)
+  getRecommendations: (limit = 3) =>
+    request<Problem[]>(`/api/problems/recommendations?limit=${limit}`),
 
   // FR-29 풀이 비교: 해당 문제의 정답 제출들
   getSolutions: (problemId: number, limit = 20) =>
@@ -146,10 +146,10 @@ export interface SubmitResponse {
 }
 
 export const submissions = {
-  submit: (userId: number, problemId: number, code: string, language = "python") =>
+  submit: (problemId: number, code: string, language = "python") =>
     request<SubmitResponse>("/api/submissions", {
       method: "POST",
-      body: JSON.stringify({ userId, problemId, code, language }),
+      body: JSON.stringify({ problemId, code, language }),
     }),
 
   getById: (id: number) => request<Submission>(`/api/submissions/${id}`),
@@ -203,7 +203,6 @@ export interface Experiment {
 }
 
 export interface ExperimentRequest {
-  userId: number
   problemId?: number
   submissionId?: number
   title?: string
@@ -219,9 +218,9 @@ export const experiments = {
       body: JSON.stringify(body),
     }),
 
-  list: (userId: number, problemId?: number) =>
+  list: (problemId?: number) =>
     request<Experiment[]>(
-      `/api/experiments?userId=${userId}${problemId ? `&problemId=${problemId}` : ""}`
+      `/api/experiments${problemId ? `?problemId=${problemId}` : ""}`
     ),
 
   remove: (id: number) =>

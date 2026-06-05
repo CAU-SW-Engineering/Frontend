@@ -150,7 +150,7 @@ export default function ProblemSolvePage() {
     setSubmitError(null)
     setResult(null)
     try {
-      const res = await submissionsApi.submit(user.userId, Number(id), code, language)
+      const res = await submissionsApi.submit(Number(id), code, language)
       setResult({ submissionId: res.submissionId, status: res.status } as Submission)
       startPolling(res.submissionId)
     } catch {
