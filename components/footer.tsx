@@ -19,13 +19,7 @@ export function Footer() {
             >
               문제
             </Link>
-            <Link
-              href="/leaderboard"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              리더보드
-            </Link>
-            <Link
+<Link
               href="#"
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
