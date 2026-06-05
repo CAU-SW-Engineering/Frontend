@@ -191,7 +191,7 @@ export default function ProblemSolvePage() {
                   <h3 className="text-lg font-semibold">입력 예시</h3>
                   <div className="mt-3 overflow-x-auto rounded-lg bg-[#0d1117] p-4">
                     <pre className="font-mono text-sm text-emerald-400">
-                      {problem.inputExample}
+                      {problem.inputExample.replaceAll('\\n', '\n')}
                     </pre>
                   </div>
                 </section>
@@ -202,7 +202,7 @@ export default function ProblemSolvePage() {
                   <h3 className="text-lg font-semibold">출력 예시</h3>
                   <div className="mt-3 overflow-x-auto rounded-lg bg-[#0d1117] p-4">
                     <pre className="font-mono text-sm text-amber-400">
-                      {problem.outputExample}
+                      {problem.outputExample.replaceAll('\\n', '\n')}
                     </pre>
                   </div>
                 </section>
@@ -224,8 +224,8 @@ export default function ProblemSolvePage() {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-3">
-                  <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 text-sm text-muted-foreground">
-                    입력 예시를 참고하여 코드를 작성해보세요.
+                  <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 text-sm text-muted-foreground whitespace-pre-wrap">
+                    {problem.hint ?? "힌트가 없습니다."}
                   </div>
                 </CollapsibleContent>
               </Collapsible>

@@ -72,6 +72,7 @@ export interface Problem {
   timeLimitMs: number
   memoryLimitMb: number
   categoryId: number
+  hint: string | null
   createdAt: string
 }
 
